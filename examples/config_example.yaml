@@ -1,0 +1,12 @@
+server_url: https://dreamhouse-eval.example.com
+task_id: AF_01_0018
+model_id: my-model-v1
+
+blender_path: /Applications/Blender.app/Contents/MacOS/Blender
+blender_timeout: 120
+
+output_dir: ./output/AF_01_0018
+
+max_retries_per_step: 5
+max_global_retries: 30
+max_steps: 15

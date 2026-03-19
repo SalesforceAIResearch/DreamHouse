@@ -1,0 +1,22 @@
+{
+  "id": "AF_01_0018",
+  "style": "American Farmhouse",
+  "description": "Generate a 2-story American Farmhouse timber-frame structure. Footprint: 7.32m x 10.97m. Roof type: gable.",
+  "constraints": {
+    "footprint_x": 7.32,
+    "footprint_y": 10.97,
+    "stories": 2,
+    "roof_type": "gable",
+    "lot_width": 9.32,
+    "lot_depth": 12.97,
+    "wings": 0,
+    "complexity": "simple"
+  },
+  "reference_images": [
+    "/v1/tasks/AF_01_0018/images/front",
+    "/v1/tasks/AF_01_0018/images/back",
+    "/v1/tasks/AF_01_0018/images/left",
+    "/v1/tasks/AF_01_0018/images/right",
+    "/v1/tasks/AF_01_0018/images/top"
+  ]
+}

@@ -1,0 +1,6 @@
+{
+  "job_id": "f8e7d6c5-b4a3-2109-8765-43210fedcba9",
+  "round": 1,
+  "status": "queued",
+  "poll_url": "/v1/sessions/a1b2c3d4-.../results/f8e7d6c5-..."
+}

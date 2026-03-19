@@ -1,0 +1,35 @@
+{
+  "session_id": "a1b2c3d4-...",
+  "job_id": "aabbccdd-...",
+  "round": 2,
+  "status": "complete",
+  "results": {
+    "task_id": "AF_01_0018",
+    "all_passed": false,
+    "pass_rate": 0.7,
+    "tests": {
+      "completeness": true,
+      "load_path": true,
+      "span_limits": true,
+      "deflection": true,
+      "roof_coverage": false,
+      "gap_detection": false,
+      "point_load": true,
+      "cantilever": true,
+      "stability_score": true,
+      "dual_end_connection": false
+    },
+    "stability_details": {
+      "score": 0.95,
+      "total_members": 120,
+      "grounded_members": 114
+    },
+    "dual_end_details": {
+      "rafters_checked": 20,
+      "rafters_failed": 4,
+      "studs_checked": 40,
+      "studs_failed": 2
+    }
+  },
+  "error": null
+}
