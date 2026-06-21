@@ -10,7 +10,7 @@ Usage:
   python examples/pipeline_scaffold.py --config my_config.yaml
 
 Config (YAML):
-  server_url: https://dreamhouse-eval.example.com
+  server_url: http://localhost:8000     # or set env var DREAMHOUSE_SERVER
   task_id: AF_01_0018
   model_id: my-model-v1
   blender_path: /Applications/Blender.app/Contents/MacOS/Blender
@@ -511,7 +511,13 @@ def main():
     with open(args.config) as f:
         config = yaml.safe_load(f)
 
-    client = EvalClient(config.get("server_url", "https://dreamhouse-eval.example.com"))
+    # Resolution order: DREAMHOUSE_SERVER env var (explicit) > YAML server_url > default.
+    # The env var wins so you can point one YAML config at any running server
+    # (e.g. when local port 8000 is taken and the server runs on 8765) without
+    # editing the config file.
+    env_server = os.environ.get("DREAMHOUSE_SERVER")
+    server_url = env_server or config.get("server_url") or "http://localhost:8000"
+    client = EvalClient(server_url)
     if not client.health():
         sys.exit("Eval server not reachable")
 

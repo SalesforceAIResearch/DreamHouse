@@ -1,11 +1,17 @@
-server_url: https://dreamhouse-eval.example.com
-task_id: AF_01_0018
+# Example pipeline configuration. Copy and adapt.
+#
+# Tip: set DREAMHOUSE_SERVER in your shell to override `server_url` without
+# editing this file (useful when port 8000 is taken and the server is running
+# on a different port, e.g. http://localhost:8765).
+
+server_url: http://localhost:8000
+task_id: BN_01_0450                       # must exist under DREAMHOUSE_TASKS_DIR
 model_id: my-model-v1
 
 blender_path: /Applications/Blender.app/Contents/MacOS/Blender
 blender_timeout: 120
 
-output_dir: ./output/AF_01_0018
+output_dir: ./output/BN_01_0450
 
 max_retries_per_step: 5
 max_global_retries: 30

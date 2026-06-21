@@ -21,7 +21,17 @@ venv/
 
 # Output
 output/
+runs/
 
 # Environment
 .env
 .env.*
+
+# Local server state (never commit)
+server/_private/
+server/_cache/
+.dreamhouse/
+
+# Task data: never commit actual house folders, but keep the README
+houses/*
+!houses/README.md

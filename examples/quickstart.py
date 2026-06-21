@@ -18,7 +18,12 @@ Requirements:
   Blender installed and accessible via command line
 
 Usage:
-  python examples/quickstart.py --server https://dreamhouse-eval.example.com --task AF_01_0018
+  python examples/quickstart.py --task AF_01_0018
+  python examples/quickstart.py --server http://localhost:8000 --task AF_01_0018
+
+The default server URL is read from the DREAMHOUSE_SERVER env var and falls
+back to http://localhost:8000, which matches the local server shipped in this
+repo (see `server/` and README "Running the server locally").
 """
 
 import argparse
@@ -126,8 +131,20 @@ add_member("Sill_04", (W, D/2, SILL[0]/2), (SILL[1], D, SILL[0]))
 # ---------------------------------------------------------------------------
 
 def run_blender(code: str, blend_file: Path, collection_name: str) -> dict:
+    """Run the generated code AND save the scene in a single Blender invocation.
+
+    The generated code and the save must happen in the same bpy session;
+    otherwise the in-memory scene created by the code is lost when Blender
+    exits, and the subsequent save writes an empty .blend.
+    """
+    save_stub = (
+        "\n\n# --- auto-appended by quickstart: persist the scene ---\n"
+        "import bpy as _bpy\n"
+        f'_bpy.ops.wm.save_as_mainfile(filepath=r"{blend_file}")\n'
+    )
+
     script = tempfile.NamedTemporaryFile(suffix=".py", mode="w", delete=False)
-    script.write(code)
+    script.write(code + save_stub)
     script.close()
 
     cmd = [BLENDER_PATH, "--background"]
@@ -140,17 +157,8 @@ def run_blender(code: str, blend_file: Path, collection_name: str) -> dict:
 
     if result.returncode != 0:
         return {"success": False, "error": result.stderr[-1500:]}
-
-    # Save the .blend
-    save_script = tempfile.NamedTemporaryFile(suffix=".py", mode="w", delete=False)
-    save_script.write(f'import bpy; bpy.ops.wm.save_as_mainfile(filepath=r"{blend_file}")')
-    save_script.close()
-
-    subprocess.run(
-        [BLENDER_PATH, "--background", str(blend_file), "--python", save_script.name],
-        capture_output=True, timeout=60,
-    )
-    os.unlink(save_script.name)
+    if not blend_file.exists():
+        return {"success": False, "error": f"Blender exited 0 but {blend_file} was not written"}
     return {"success": True}
 
 
@@ -272,19 +280,25 @@ def format_feedback(results: dict) -> str:
 # ---------------------------------------------------------------------------
 
 def main():
+    global BLENDER_PATH
+
     parser = argparse.ArgumentParser(description="DreamHouse Benchmark — Quick Start")
-    parser.add_argument("--server", default="https://dreamhouse-eval.example.com")
+    parser.add_argument(
+        "--server",
+        default=os.environ.get("DREAMHOUSE_SERVER", "http://localhost:8000"),
+    )
     parser.add_argument("--task", default="AF_01_0018")
     parser.add_argument("--blender", default=BLENDER_PATH)
     parser.add_argument("--output-dir", default=None)
     parser.add_argument("--max-retries", type=int, default=3)
     args = parser.parse_args()
 
-    global BLENDER_PATH
     BLENDER_PATH = args.blender
 
     work_dir = Path(args.output_dir or tempfile.mkdtemp(prefix="dreamhouse_"))
     work_dir.mkdir(parents=True, exist_ok=True)
+    attempts_dir = work_dir / "attempts"
+    attempts_dir.mkdir(exist_ok=True)
     print(f"Working directory: {work_dir}")
 
     # Step 1: Fetch task
@@ -297,6 +311,7 @@ def main():
     print(f"    Downloading reference images...")
     images = download_images(args.server, task, work_dir / "images")
     print(f"    Got {len(images)} images")
+    (work_dir / "task.json").write_text(json.dumps(task, indent=2))
 
     # Step 2: Create session
     print(f"\n[2] Creating eval session...")
@@ -306,35 +321,78 @@ def main():
     collection_name = args.task
     blend_file = work_dir / "structure.blend"
 
+    # History of every attempt; dumped to summary.json at the end so the
+    # feedback loop across retries is reproducible and inspectable.
+    history: list[dict] = []
+    final_results: dict | None = None
+    final_status = "no_submission"
+
     # Step 3-7: Generate, execute, submit, iterate
     for attempt in range(1, args.max_retries + 1):
+        attempt_dir = attempts_dir / f"attempt_{attempt}"
+        attempt_dir.mkdir(exist_ok=True)
+        attempt_entry: dict = {
+            "attempt": attempt,
+            "status": "pending",
+        }
+        history.append(attempt_entry)
+
         print(f"\n[3] Generating code (attempt {attempt})...")
         prompt = f"Build a {task['description']}"
         code = call_your_model(prompt, images)
         code = code.replace("COLLECTION_NAME", collection_name)
-        (work_dir / f"code_attempt_{attempt}.py").write_text(code)
+        code_path = attempt_dir / "code.py"
+        code_path.write_text(code)
+        attempt_entry["code_path"] = str(code_path.relative_to(work_dir))
 
         print(f"[4] Executing in Blender...")
         result = run_blender(code, blend_file, collection_name)
         if not result["success"]:
-            print(f"    Blender error: {result['error'][:200]}")
+            err = result.get("error", "")[:200]
+            print(f"    Blender error: {err}")
+            attempt_entry["status"] = "blender_error"
+            attempt_entry["error"] = err
             continue
 
         print(f"[5] Exporting geometry...")
         submission = export_geometry(blend_file, collection_name)
         if not submission or not submission.get("members"):
             print(f"    No members exported")
+            attempt_entry["status"] = "export_empty"
             continue
-        print(f"    {len(submission['members'])} members")
+        member_count = len(submission["members"])
+        print(f"    {member_count} members")
+
+        submission_path = attempt_dir / "submission.json"
+        submission_path.write_text(json.dumps(submission, indent=2))
+        attempt_entry["submission_path"] = str(submission_path.relative_to(work_dir))
+        attempt_entry["member_count"] = member_count
 
         print(f"[6] Submitting to eval server...")
         results = submit_and_poll(args.server, session_id, submission["members"])
         if results is None:
+            print(f"    No results from server")
+            attempt_entry["status"] = "submit_failed"
             continue
 
-        print(f"[7] Results:")
+        result_path = attempt_dir / "result.json"
+        result_path.write_text(json.dumps(results, indent=2))
+        attempt_entry["result_path"] = str(result_path.relative_to(work_dir))
+        attempt_entry["all_passed"] = bool(results.get("all_passed"))
+        attempt_entry["pass_rate"] = results.get("pass_rate")
+        attempt_entry["tests"] = results.get("tests", {})
+        attempt_entry["failed_tests"] = [
+            t for t, v in (results.get("tests") or {}).items() if not v
+        ]
+        attempt_entry["status"] = "passed" if results.get("all_passed") else "failed"
+
         feedback = format_feedback(results)
+        attempt_entry["feedback"] = feedback
+        print(f"[7] Results:")
         print(f"    {feedback}")
+
+        final_results = results
+        final_status = attempt_entry["status"]
 
         if results["all_passed"]:
             print(f"\n    All tests passed on attempt {attempt}!")
@@ -344,7 +402,32 @@ def main():
     else:
         print(f"\n    Exhausted {args.max_retries} retries")
 
-    print(f"\nDone. Output in: {work_dir}")
+    # Persist the latest validation results and the full feedback history.
+    if final_results is not None:
+        (work_dir / "results.json").write_text(json.dumps(final_results, indent=2))
+
+    summary = {
+        "task_id": args.task,
+        "server": args.server,
+        "session_id": session_id,
+        "status": final_status,
+        "attempts_made": len(history),
+        "max_retries": args.max_retries,
+        "all_passed": bool(final_results and final_results.get("all_passed")),
+        "final_results": final_results,
+        "history": history,
+    }
+    (work_dir / "summary.json").write_text(json.dumps(summary, indent=2))
+
+    print(f"\nArtifacts:")
+    print(f"  {work_dir}/task.json         - task spec")
+    print(f"  {work_dir}/images/           - reference images")
+    print(f"  {work_dir}/structure.blend   - last Blender scene")
+    print(f"  {work_dir}/attempts/         - per-attempt code, submission, result")
+    if final_results is not None:
+        print(f"  {work_dir}/results.json      - latest validation results")
+    print(f"  {work_dir}/summary.json      - full feedback history")
+    print(f"\nDone.")
 
 
 if __name__ == "__main__":
