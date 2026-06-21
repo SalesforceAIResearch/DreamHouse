@@ -170,7 +170,39 @@ evaluation.
 pip install -r requirements.txt
 ```
 
-### 2. Install the validator
+### 2. Download benchmark artifacts
+
+Download the runtime artifacts from the maintainer-provided release folder:
+
+https://drive.google.com/drive/folders/1hY4xohyQ7IxxQSG5tz0U-e6OZOdGOV3b?usp=drive_link
+
+The folder should contain:
+
+```text
+SHA256SUMS.txt
+validation.pyc
+dreamhouse_tasks_1200.dhpack.part-00
+dreamhouse_tasks_1200.dhpack.part-01
+dreamhouse_tasks_1200.dhpack.part-02
+```
+
+After downloading all files into one local directory, reassemble the task pack:
+
+```bash
+cat dreamhouse_tasks_1200.dhpack.part-* > dreamhouse_tasks_1200.dhpack
+shasum -a 256 dreamhouse_tasks_1200.dhpack
+```
+
+Expected checksum:
+
+```text
+390273e4b300ea35985ea569e4b1684a60ce3feb865f8194ff87c801109dff86
+```
+
+If the checksum does not match, re-download the split files before running the
+benchmark.
+
+### 3. Install the validator
 
 Install the validator artifact provided with the benchmark release:
 
@@ -185,7 +217,7 @@ If you are a maintainer working from source, the same command also accepts a
 local `validation.py` and compiles it for you. The installed validator lives
 in `server/_private/`, which is ignored by git.
 
-### 3. Point the server at the task pack
+### 4. Point the server at the task pack
 
 Set `DREAMHOUSE_TASKS_PACK` to the `.dhpack` file:
 
@@ -195,7 +227,7 @@ export DREAMHOUSE_TASKS_PACK=/absolute/path/to/dreamhouse_tasks_1200.dhpack
 
 Do not unpack the task pack. The local server reads it directly.
 
-### 4. Start the server
+### 5. Start the server
 
 ```bash
 # Blender executable (adjust for your OS if different)
