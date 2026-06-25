@@ -1,12 +1,47 @@
 # DreamHouse Benchmark
 
-Evaluate AI models on timber-frame structure generation. Your model receives reference images and constraints, generates 3D geometry in Blender, and the server validates it against 10 structural engineering tests.
+Evaluate AI models on timber-frame structure generation. Your model receives
+reference images and constraints, generates 3D geometry in Blender, and
+DreamHouse validates it against 10 structural engineering tests.
+
+## Links
+
+- [Project page](https://luluyuyuyang.github.io/dreamhouse/)
+- [Run benchmark tutorial](https://luluyuyuyang.github.io/dreamhouse/run.html)
+- [arXiv paper](https://arxiv.org/abs/2603.24866)
+- [GitHub repository](https://github.com/SalesforceAIResearch/DreamHouse)
+
+## Recommended Install
+
+The easiest way to run DreamHouse is through the published Python package:
+
+```bash
+pip install dreamhouse
+dreamhouse --help
+```
+
+Then let the CLI check your environment and set up the runtime artifacts:
+
+```bash
+dreamhouse doctor
+dreamhouse setup --download-artifacts
+```
+
+If Blender is not installed, the CLI can install the tested default runtime:
+
+```bash
+dreamhouse setup --download-artifacts --install-blender
+```
+
+For a step-by-step walkthrough, see the
+[Run Benchmark tutorial](https://luluyuyuyang.github.io/dreamhouse/run.html).
 
 ## Prerequisites
 
 - **Python 3.9+**
-- **Blender** — free and open-source, download at [blender.org/download](https://www.blender.org/download/). No add-ons or plugins needed — just a standard install.
-- `pip install -r requirements.txt`
+- **Blender 4.5.4 LTS** is the recommended runtime. This release uses
+  Blender's bundled Python 3.11, which matches the provided validator artifact.
+- The `dreamhouse` CLI from PyPI, installed with `pip install dreamhouse`
 
 ## Server
 
@@ -19,6 +54,107 @@ http://localhost:8000
 Interactive Swagger docs: `http://localhost:8000/docs`
 
 See [Running the server locally](#running-the-server-locally) below for setup.
+
+---
+
+## Quick Start
+
+Install the package from PyPI:
+
+```bash
+pip install dreamhouse
+```
+
+You do **not** need to clone this repository for the standard CLI workflow.
+For development from a cloned repository, use `pip install -e .` instead.
+
+Check your local environment:
+
+```bash
+dreamhouse doctor
+```
+
+Set up benchmark artifacts. This downloads the split task pack, reassembles
+it, verifies the checksum, and installs the validator artifact:
+
+```bash
+dreamhouse setup --download-artifacts
+```
+
+If Blender is not already installed, use the tested default:
+
+```bash
+dreamhouse setup --download-artifacts --install-blender
+```
+
+The recommended runtime is **Blender 4.5.4 LTS** with bundled **Python 3.11**.
+If you use your own Blender install, run `dreamhouse doctor` and make sure its
+Python version is 3.11.x.
+
+Validator artifacts are selected by Blender's bundled Python version. The
+initial release provides `validation.pyc` for Python 3.11. Future releases may
+include versioned artifacts such as `validation-cp311.pyc`; `dreamhouse setup`
+will choose the matching file automatically.
+
+Run a harness smoke test:
+
+```bash
+dreamhouse smoke-test --task BN_01_0003 --output-dir ./runs/smoke_BN_01_0003
+```
+
+This uses a built-in stub agent. It verifies setup, Blender execution,
+geometry export, server submission, and validation. It is **not** a model
+evaluation.
+
+Run one task with your own agent:
+
+```bash
+dreamhouse run \
+  --task BN_01_0003 \
+  --agent my_agent:generate \
+  --output-dir ./runs/BN_01_0003
+```
+
+Your agent function must accept `(prompt: str, images: list[str],
+feedback: list[dict])` and return Blender Python code. See
+[`examples/agent_template.py`](examples/agent_template.py).
+
+Two common agent patterns are supported out of the box:
+
+Hosted OpenAI API:
+
+```bash
+export OPENAI_API_KEY=...
+export OPENAI_MODEL=gpt-4.1
+dreamhouse run --task BN_01_0003 --agent examples.openai_agent:generate
+```
+
+Self-hosted OpenAI-compatible endpoint:
+
+```bash
+export OPENAI_BASE_URL=http://127.0.0.1:8001/v1
+export OPENAI_API_KEY=dummy
+export OPENAI_MODEL=my-vision-model
+dreamhouse run --task BN_01_0003 --agent examples.openai_compatible_agent:generate
+```
+
+For local integration testing without a real model, run the mock endpoint:
+
+```bash
+python examples/mock_openai_server.py --port 8001
+```
+
+List available task ids:
+
+```bash
+dreamhouse list-tasks --limit 20
+```
+
+You can also start only the local API server:
+
+```bash
+dreamhouse server --port 8000
+```
 
 ---
 
@@ -155,7 +291,11 @@ Names must be unique: `Stud_01`, `Stud_02`, etc.
 
 ## Running the server locally
 
-The benchmark runs locally. Users need this repo, Blender, and the provided
+The standard CLI path above starts and manages the local server for you. This
+section is for users who want to run the API server manually from a cloned
+repository.
+
+The benchmark runs locally. Manual server setup needs Blender and the provided
 benchmark artifacts:
 
 - `dreamhouse_tasks_1200.dhpack` — task metadata and reference images
@@ -167,7 +307,13 @@ evaluation.
 ### 1. Install dependencies
 
 ```bash
-pip install -r requirements.txt
+pip install dreamhouse
+```
+
+For local development from this repository:
+
+```bash
+pip install -e .
 ```
 
 ### 2. Download benchmark artifacts
@@ -186,7 +332,15 @@ dreamhouse_tasks_1200.dhpack.part-01
 dreamhouse_tasks_1200.dhpack.part-02
 ```
 
-After downloading all files into one local directory, reassemble the task pack:
+The recommended setup command performs the download, reassembly, checksum
+verification, and validator install automatically:
+
+```bash
+dreamhouse setup --download-artifacts
+```
+
+For manual setup, download all files into one local directory and reassemble
+the task pack:
 
 ```bash
 cat dreamhouse_tasks_1200.dhpack.part-* > dreamhouse_tasks_1200.dhpack
@@ -254,7 +408,7 @@ export DREAMHOUSE_SERVER=http://localhost:8765
 | `DREAMHOUSE_TASKS_PACK`      | Path to the provided task pack             | unset                                                   |
 | `DREAMHOUSE_VALIDATOR`       | Path to the compiled validator             | `<repo>/server/_private/validation.pyc`                 |
 | `DREAMHOUSE_BLENDER_TIMEOUT` | Seconds per validation run                 | `180`                                                   |
-| `BLENDER_PATH`               | Blender executable                         | `/Applications/Blender.app/Contents/MacOS/Blender`      |
+| `BLENDER_PATH`               | Blender executable                         | auto-detected by `dreamhouse`; server fallback is macOS default |
 | `DREAMHOUSE_SERVER`          | Server URL used by the example clients     | `http://localhost:8000`                                 |
 
 ---
@@ -271,12 +425,17 @@ export DREAMHOUSE_SERVER=http://localhost:8765
 
 ```bash
 export DREAMHOUSE_SERVER=http://localhost:8000      # if different, e.g. 8765
-python examples/quickstart.py --task BN_01_0003 --output-dir ./runs/BN_01_0003
+python examples/quickstart.py \
+  --task BN_01_0003 \
+  --agent my_agent:generate \
+  --output-dir ./runs/BN_01_0003
 ```
 
-Replace `call_your_model()` in the script with a real model call (Claude,
-GPT, Gemini, local VLM, etc.). The shipped stub just emits four sill
-plates so you can verify the plumbing.
+Use `dreamhouse run --agent module:function` for real model evaluation.
+The shipped stub is only used by `dreamhouse smoke-test`; it emits four sill
+plates so you can verify the harness plumbing.
+
+For direct script-level harness testing only, pass `--use-stub`.
 
 #### What to expect in the console
 
@@ -286,7 +445,7 @@ summary:
 ```
 [1] Fetching task BN_01_0003...         pulls task spec + 5 reference images
 [2] Creating eval session...            returns a session_id
-[3] Generating code (attempt N)...      calls call_your_model(prompt, images)
+[3] Generating code (attempt N)...      calls your --agent function
 [4] Executing in Blender...             runs the code, saves structure.blend
 [5] Exporting geometry...               writes submission.json with N members
 [6] Submitting to eval server...        POSTs /v1/sessions/.../submit
